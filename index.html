@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Canlı Plaka Okuma & Araç Takip</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <style>
+    :root {
+      --primary: #0f172a;
+      --accent: #2563eb;
+      --success: #16a34a;
+      --warning: #f59e0b;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --text-muted: #64748b;
+    }
+
+    * { box-sizing: border-box; font-family: 'Inter', sans-serif; margin: 0; padding: 0; }
+    body { background-color: var(--bg); color: var(--text); padding-bottom: 50px; }
+
+    header {
+      background: var(--primary);
+      color: #fff;
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 { font-size: 1.05rem; font-weight: 700; }
+    #connectionStatus { font-size: 0.75rem; padding: 4px 8px; border-radius: 99px; background: #334155; color: #cbd5e1; }
+
+    .main { max-width: 500px; margin: 0 auto; padding: 12px; }
+
+    /* Canlı Kamera Alanı */
+    .viewport-card {
+      position: relative;
+      width: 100%;
+      height: 240px;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 14px;
+      border: 1px solid var(--border);
+    }
+    video { width: 100%; height: 100%; object-fit: cover; }
+    
+    /* Plaka Hedef Çerçevesi (Vizör) */
+    .plate-target {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 75%;
+      height: 60px;
+      border: 2px solid #22c55e;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+      border-radius: 6px;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .plate-target::after {
+      content: "PLAKAYI BU ALANA TUTUN";
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      background: rgba(0,0,0,0.6);
+      padding: 2px 6px;
+      border-radius: 4px;
+      position: absolute;
+      bottom: -22px;
+    }
+
+    .cam-overlay-status {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+      font-weight: 600;
+      pointer-events: none;
+    }
+
+    .scanner-controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .btn {
+      flex: 1;
+      padding: 12px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn-cam-toggle { background: var(--accent); color: #fff; }
+    .btn-pause { background: #475569; color: #fff; }
+
+    /* Arama ve Liste */
+    .search-card {
+      background: var(--card);
+      border-radius: 10px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      margin-bottom: 14px;
+    }
+    .search-input {
+      width: 100%;
+      padding: 12px;
+      font-size: 1rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .search-input:focus { border-color: var(--accent); outline: none; }
+
+    .results { max-height: 280px; overflow-y: auto; margin-top: 10px; }
+    .result-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 8px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .result-plate {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1rem;
+      font-weight: 700;
+      background: #e2e8f0;
+      padding: 4px 8px;
+      border-radius: 4px;
+      border-left: 3px solid #facc15;
+    }
+    .result-meta { text-align: right; }
+    .result-name { font-weight: 600; font-size: 0.9rem; }
+    .result-loc { font-size: 0.75rem; color: var(--text-muted); }
+
+    /* Düzenleme Ekranı */
+    .edit-modal {
+      display: none;
+      background: var(--card);
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      margin-top: 14px;
+    }
+    .edit-modal h3 { font-size: 1rem; margin-bottom: 12px; }
+    .field { margin-bottom: 10px; }
+    .field label { display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; }
+    .field input { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 0.95rem; }
+    .actions { display: flex; gap: 8px; margin-top: 14px; }
+    .btn-save { background: var(--success); color: #fff; }
+    .btn-close { background: #e2e8f0; color: #334155; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Site Sakin & Canlı Plaka Okuyucu</h1>
+    <div id="connectionStatus">Bağlanıyor...</div>
+  </header>
+
+  <div class="main">
+    
+    <!-- Canlı Kamera Vizörü -->
+    <div class="viewport-card">
+      <video id="webcam" playsinline autoplay muted></video>
+      <div class="plate-target"></div>
+      <div class="cam-overlay-status">
+        <span id="fpsCounter">Canlı Tarama</span>
+        <span id="detectedRaw">Metin bekleniyor...</span>
+      </div>
+      <canvas id="cropCanvas" style="display:none;"></canvas>
+    </div>
+
+    <!-- Kamera Butonları -->
+    <div class="scanner-controls">
+      <button class="btn btn-cam-toggle" id="btnStart" onclick="startScanner()">📷 Kamerayı Başlat</button>
+      <button class="btn btn-pause" id="btnPause" onclick="togglePause()" style="display:none;">⏸ Duraklat</button>
+    </div>
+
+    <!-- Manuel Arama -->
+    <div class="search-card">
+      <input type="text" id="searchInput" class="search-input" placeholder="PLAKA / SAKİN / DAİRE ARA..." oninput="handleSearch()">
+      <div class="results" id="resultsList"></div>
+    </div>
+
+    <!-- Bilgi Düzenleme Paneli -->
+    <div class="edit-modal" id="editModal">
+      <h3>Sakin & Araç Kaydı Düzenle</h3>
+      <input type="hidden" id="editRow">
+      <div style="display:flex; gap:8px;">
+        <div class="field" style="flex:1;">
+          <label>Blok</label>
+          <input type="text" id="editBlok">
+        </div>
+        <div class="field" style="flex:1;">
+          <label>Daire</label>
+          <input type="text" id="editDaire">
+        </div>
+      </div>
+      <div class="field">
+        <label>Sakin Adı Soyadı</label>
+        <input type="text" id="editAdSoyad">
+      </div>
+      <div class="field">
+        <label>Telefon</label>
+        <input type="text" id="editTelefon">
+      </div>
+      <div class="field">
+        <label>Araç Plakası</label>
+        <input type="text" id="editPlaka" style="font-family:'JetBrains Mono',monospace; font-weight:700;">
+      </div>
+      <div class="actions">
+        <button class="btn btn-save" id="btnSave" onclick="saveData()">Kaydet</button>
+        <button class="btn btn-close" onclick="closeEdit()">Kapat</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // -------------------------------------------------------------
+    // BURAYA ADIM 1'DEKİ APPS SCRIPT WEB APP URL'NİZİ YAPIŞTIRIN
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzhepimbIndy0vO4TelDeeYRiV4ODeNWGzFQ8tmTBefigNXWi3v_U_Jfb9K4Bt2KwaP/exec";
+    // -------------------------------------------------------------
+
+    let db = [];
+    let videoStream = null;
+    let isProcessing = false;
+    let isPaused = false;
+    let scanInterval = null;
+    let tesseractWorker = null;
+
+    // Türkiye Plaka Regex Deseni (Örn: 34ABC123, 06A1234, 10T1234, 35AB1234)
+    const PLATE_REGEX = /^(0[1-9]|[1-7][0-9]|8[01])([A-Z]{1,3})(\d{2,4})$/;
+
+    // Sayfa açılışında Tesseract Worker hazırla ve tabloyu çek
+    window.onload = async function() {
+      fetchData();
+      try {
+        tesseractWorker = await Tesseract.createWorker('eng');
+        await tesseractWorker.setParameters({
+          tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE
+        });
+      } catch (e) {
+        console.error("Worker başlatılamadı:", e);
+      }
+    };
+
+    // Google Tablosundan Veri Çek
+    async function fetchData() {
+      const status = document.getElementById('connectionStatus');
+      try {
+        const res = await fetch(APPS_SCRIPT_URL);
+        db = await res.json();
+        status.innerText = db.length + " Araç Kayıtlı";
+        status.style.background = "#16a34a";
+      } catch (err) {
+        status.innerText = "Tabloya Erişilemedi";
+        status.style.background = "#dc2626";
+      }
+    }
+
+    // Canlı Kamera Başlat (İframe dışındayken tam donanım erişimi)
+    async function startScanner() {
+      const video = document.getElementById('webcam');
+      const btnStart = document.getElementById('btnStart');
+      const btnPause = document.getElementById('btnPause');
+
+      try {
+        videoStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } },
+          audio: false
+        });
+        video.srcObject = videoStream;
+        await video.play();
+
+        btnStart.style.display = 'none';
+        btnPause.style.display = 'flex';
+
+        // Saniyede 3 kez otomatik analiz döngüsü
+        scanInterval = setInterval(processFrame, 350);
+      } catch (err) {
+        alert("Kamera açılamadı: " + err.message);
+      }
+    }
+
+    function togglePause() {
+      isPaused = !isPaused;
+      document.getElementById('btnPause').innerText = isPaused ? "▶ Devam Et" : "⏸ Duraklat";
+    }
+
+    // Kare Kırpma ve OCR İncelemesi
+    async function processFrame() {
+      if (isProcessing || isPaused || !videoStream || !tesseractWorker) return;
+
+      const video = document.getElementById('webcam');
+      if (video.videoWidth === 0) return;
+
+      isProcessing = true;
+      const canvas = document.getElementById('cropCanvas');
+      const ctx = canvas.getContext('2d');
+
+      // Yalnızca ekrandaki hedef vizör alanını kırpıyoruz (Performans ve doğruluk için)
+      const cropW = video.videoWidth * 0.75;
+      const cropH = video.videoHeight * 0.25;
+      const cropX = (video.videoWidth - cropW) / 2;
+      const cropY = (video.videoHeight - cropH) / 2;
+
+      canvas.width = cropW;
+      canvas.height = cropH;
+
+      // Görüntüyü kırpıp binarize/kontrast artırma filtresi uygulama
+      ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+      
+      try {
+        const { data: { text } } = await tesseractWorker.recognize(canvas);
+        let raw = text.replace(/[^A-Z0-9]/g, '').trim();
+
+        // Baş kısımdaki 'TR' kodunu temizle
+        if (raw.startsWith("TR") && raw.length > 7) {
+          raw = raw.substring(2);
+        }
+
+        if (raw) {
+          document.getElementById('detectedRaw').innerText = raw;
+        }
+
+        // Geçerli bir plaka formatı yakalandı mı?
+        if (PLATE_REGEX.test(raw)) {
+          // Başarılı algılama: Titreşim veya bip verip akışı duraklat
+          if (navigator.vibrate) navigator.vibrate(150);
+          isPaused = true;
+          document.getElementById('btnPause').innerText = "▶ Devam Et";
+
+          document.getElementById('searchInput').value = raw;
+          handleSearch();
+
+          // Kayıt veritabanında varsa direkt kartını aç
+          const matched = db.find(i => i.plaka === raw);
+          if (matched) {
+            openEdit(matched);
+          }
+        }
+      } catch (err) {
+        console.warn("OCR tarama hatası:", err);
+      } finally {
+        isProcessing = false;
+      }
+    }
+
+    // Arama ve Liste
+    function handleSearch() {
+      const q = document.getElementById('searchInput').value.trim().toUpperCase();
+      const list = document.getElementById('resultsList');
+      list.innerHTML = '';
+      if (!q) return;
+
+      const filtered = db.filter(i => 
+        i.plaka.includes(q) || 
+        i.adSoyad.toUpperCase().includes(q) || 
+        i.blok.toUpperCase().includes(q) || 
+        i.daire.toString().includes(q)
+      );
+
+      if (filtered.length === 0) {
+        list.innerHTML = `<div style="text-align:center; padding:12px; font-size:0.85rem; color:#64748b;">Kayıt bulunamadı.</div>`;
+        return;
+      }
+
+      filtered.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'result-item';
+        div.innerHTML = `
+          <div>
+            <span class="result-plate">${item.plaka}</span>
+            <div class="result-loc">${item.blok} Blok - No: ${item.daire}</div>
+          </div>
+          <div class="result-meta">
+            <div class="result-name">${item.adSoyad}</div>
+            <div class="result-loc">${item.telefon || 'Tel Yok'}</div>
+          </div>
+        `;
+        div.onclick = () => openEdit(item);
+        list.appendChild(div);
+      });
+    }
+
+    // Düzenleme Kartı İşlemleri
+    function openEdit(item) {
+      document.getElementById('editRow').value = item.rowIndex;
+      document.getElementById('editBlok').value = item.blok;
+      document.getElementById('editDaire').value = item.daire;
+      document.getElementById('editAdSoyad').value = item.adSoyad;
+      document.getElementById('editTelefon').value = item.telefon;
+      document.getElementById('editPlaka').value = item.plaka;
+
+      const modal = document.getElementById('editModal');
+      modal.style.display = 'block';
+      modal.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function closeEdit() {
+      document.getElementById('editModal').style.display = 'none';
+    }
+
+    async function saveData() {
+      const btn = document.getElementById('btnSave');
+      btn.disabled = true;
+      btn.innerText = "Kaydediliyor...";
+
+      const payload = {
+        rowIndex: document.getElementById('editRow').value,
+        blok: document.getElementById('editBlok').value,
+        daire: document.getElementById('editDaire').value,
+        adSoyad: document.getElementById('editAdSoyad').value,
+        telefon: document.getElementById('editTelefon').value,
+        plaka: document.getElementById('editPlaka').value.replace(/\s+/g, '').toUpperCase()
+      };
+
+      try {
+        await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors', // Apps Script cross-origin redirect çözümü
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        // Lokal veriyi anında güncelle
+        const idx = db.findIndex(i => i.rowIndex == payload.rowIndex);
+        if (idx !== -1) db[idx] = payload;
+        
+        handleSearch();
+        closeEdit();
+        alert("Bilgiler güncellendi!");
+      } catch (err) {
+        alert("Kayıt hatası: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "Kaydet";
+      }
+    }
+  </script>
+</body>
+</html>
