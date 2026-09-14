@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Canlı Plaka Okuma & Araç Takip</title>
+  <title>Nova Garden Sitesi Plaka Bilgi Sistemi</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
@@ -14,7 +14,9 @@
       --primary: #0f172a;
       --accent: #2563eb;
       --success: #16a34a;
+      --success-hover: #15803d;
       --warning: #f59e0b;
+      --danger: #dc2626;
       --bg: #f8fafc;
       --card: #ffffff;
       --border: #e2e8f0;
@@ -111,9 +113,29 @@
       align-items: center;
       justify-content: center;
       gap: 6px;
+      text-decoration: none;
+      transition: background 0.15s ease;
     }
     .btn-cam-toggle { background: var(--accent); color: #fff; }
     .btn-pause { background: #475569; color: #fff; }
+
+    /* Arama Butonu */
+    .btn-call {
+      background-color: var(--success);
+      color: #ffffff;
+      padding: 8px 14px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.85rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: none;
+      white-space: nowrap;
+    }
+    .btn-call:hover { background-color: var(--success-hover); }
+    .btn-call.disabled { background-color: #cbd5e1; pointer-events: none; color: #94a3b8; }
 
     /* Arama ve Liste */
     .search-card {
@@ -142,7 +164,6 @@
       align-items: center;
       padding: 12px 8px;
       border-bottom: 1px solid var(--border);
-      cursor: pointer;
     }
     .result-plate {
       font-family: 'JetBrains Mono', monospace;
@@ -172,10 +193,39 @@
     .field input { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 0.95rem; }
     .actions { display: flex; gap: 8px; margin-top: 14px; }
     .btn-save { background: var(--success); color: #fff; }
+    .btn-save:hover { background: var(--success-hover); }
     .btn-close { background: #e2e8f0; color: #334155; }
+
+    /* Özel Bildirim Kutusu (Toast) */
+    #toastNotification {
+      position: fixed;
+      top: -60px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #0f172a;
+      color: #ffffff;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+      z-index: 99999;
+      transition: top 0.3s ease-in-out;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #toastNotification.show { top: 20px; }
+    #toastNotification.toast-success { background-color: var(--success); }
+    #toastNotification.toast-error { background-color: var(--danger); }
   </style>
 </head>
 <body>
+
+  <!-- Özel Bildirim Alanı -->
+  <div id="toastNotification">
+    <span id="toastText">Bilgiler güncellendi</span>
+  </div>
 
   <header>
     <h1>Site Sakin & Canlı Plaka Okuyucu</h1>
@@ -227,7 +277,12 @@
       </div>
       <div class="field">
         <label>Telefon</label>
-        <input type="text" id="editTelefon">
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="editTelefon" oninput="updateCallButton(this.value)">
+          <a href="#" id="btnCallResident" class="btn-call disabled" target="_blank">
+            📞 Ara
+          </a>
+        </div>
       </div>
       <div class="field">
         <label>Araç Plakası</label>
@@ -243,8 +298,8 @@
 
   <script>
     // -------------------------------------------------------------
-    // BURAYA ADIM 1'DEKİ APPS SCRIPT WEB APP URL'NİZİ YAPIŞTIRIN
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzhepimbIndy0vO4TelDeeYRiV4ODeNWGzFQ8tmTBefigNXWi3v_U_Jfb9K4Bt2KwaP/exec";
+    // BURAYA APPS SCRIPT WEB APP URL'NİZİ YAPIŞTIRIN (/exec ile biten)
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx.../exec";
     // -------------------------------------------------------------
 
     let db = [];
@@ -254,10 +309,24 @@
     let scanInterval = null;
     let tesseractWorker = null;
 
-    // Türkiye Plaka Regex Deseni (Örn: 34ABC123, 06A1234, 10T1234, 35AB1234)
+    // Türkiye Plaka Regex Deseni
     const PLATE_REGEX = /^(0[1-9]|[1-7][0-9]|8[01])([A-Z]{1,3})(\d{2,4})$/;
 
-    // Sayfa açılışında Tesseract Worker hazırla ve tabloyu çek
+    // Modern Bildirim Gösterici (Standart alert() yerine)
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toastNotification');
+      const text = document.getElementById('toastText');
+      text.innerText = message;
+      
+      toast.className = '';
+      toast.classList.add(type === 'success' ? 'toast-success' : 'toast-error', 'show');
+
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
+    // Sayfa açılışında Tesseract Worker hazırla ve tablo verilerini çek
     window.onload = async function() {
       fetchData();
       try {
@@ -271,7 +340,7 @@
       }
     };
 
-    // Google Tablosundan Veri Çek
+    // Google Tablosundan Veri Çekme
     async function fetchData() {
       const status = document.getElementById('connectionStatus');
       try {
@@ -285,7 +354,7 @@
       }
     }
 
-    // Canlı Kamera Başlat (İframe dışındayken tam donanım erişimi)
+    // Canlı Kamera Başlatma
     async function startScanner() {
       const video = document.getElementById('webcam');
       const btnStart = document.getElementById('btnStart');
@@ -302,10 +371,9 @@
         btnStart.style.display = 'none';
         btnPause.style.display = 'flex';
 
-        // Saniyede 3 kez otomatik analiz döngüsü
         scanInterval = setInterval(processFrame, 350);
       } catch (err) {
-        alert("Kamera açılamadı: " + err.message);
+        showToast("Kamera açılamadı: " + err.message, "error");
       }
     }
 
@@ -314,7 +382,7 @@
       document.getElementById('btnPause').innerText = isPaused ? "▶ Devam Et" : "⏸ Duraklat";
     }
 
-    // Kare Kırpma ve OCR İncelemesi
+    // Canlı Görüntüyü Kırpıp OCR ile Analiz Etme
     async function processFrame() {
       if (isProcessing || isPaused || !videoStream || !tesseractWorker) return;
 
@@ -325,7 +393,6 @@
       const canvas = document.getElementById('cropCanvas');
       const ctx = canvas.getContext('2d');
 
-      // Yalnızca ekrandaki hedef vizör alanını kırpıyoruz (Performans ve doğruluk için)
       const cropW = video.videoWidth * 0.75;
       const cropH = video.videoHeight * 0.25;
       const cropX = (video.videoWidth - cropW) / 2;
@@ -334,14 +401,12 @@
       canvas.width = cropW;
       canvas.height = cropH;
 
-      // Görüntüyü kırpıp binarize/kontrast artırma filtresi uygulama
       ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
       
       try {
         const { data: { text } } = await tesseractWorker.recognize(canvas);
         let raw = text.replace(/[^A-Z0-9]/g, '').trim();
 
-        // Baş kısımdaki 'TR' kodunu temizle
         if (raw.startsWith("TR") && raw.length > 7) {
           raw = raw.substring(2);
         }
@@ -350,9 +415,7 @@
           document.getElementById('detectedRaw').innerText = raw;
         }
 
-        // Geçerli bir plaka formatı yakalandı mı?
         if (PLATE_REGEX.test(raw)) {
-          // Başarılı algılama: Titreşim veya bip verip akışı duraklat
           if (navigator.vibrate) navigator.vibrate(150);
           isPaused = true;
           document.getElementById('btnPause').innerText = "▶ Devam Et";
@@ -360,14 +423,13 @@
           document.getElementById('searchInput').value = raw;
           handleSearch();
 
-          // Kayıt veritabanında varsa direkt kartını aç
           const matched = db.find(i => i.plaka === raw);
           if (matched) {
             openEdit(matched);
           }
         }
       } catch (err) {
-        console.warn("OCR tarama hatası:", err);
+        console.warn("OCR hatası:", err);
       } finally {
         isProcessing = false;
       }
@@ -393,24 +455,48 @@
       }
 
       filtered.forEach(item => {
+        const cleanPhone = String(item.telefon || '').replace(/[^0-9+]/g, '');
+        const hasPhone = cleanPhone.length >= 7;
+
         const div = document.createElement('div');
         div.className = 'result-item';
         div.innerHTML = `
-          <div>
+          <div onclick="openEditByRow(${item.rowIndex})" style="flex:1; cursor:pointer;">
             <span class="result-plate">${item.plaka}</span>
             <div class="result-loc">${item.blok} Blok - No: ${item.daire}</div>
           </div>
-          <div class="result-meta">
-            <div class="result-name">${item.adSoyad}</div>
-            <div class="result-loc">${item.telefon || 'Tel Yok'}</div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div class="result-meta" onclick="openEditByRow(${item.rowIndex})" style="cursor:pointer;">
+              <div class="result-name">${item.adSoyad}</div>
+              <div class="result-loc">${item.telefon || 'Tel Yok'}</div>
+            </div>
+            ${hasPhone ? `<a href="tel:${cleanPhone}" class="btn-call" style="padding:6px 10px;" onclick="event.stopPropagation();">📞</a>` : ''}
           </div>
         `;
-        div.onclick = () => openEdit(item);
         list.appendChild(div);
       });
     }
 
-    // Düzenleme Kartı İşlemleri
+    function openEditByRow(rowIndex) {
+      const item = db.find(i => i.rowIndex == rowIndex);
+      if (item) openEdit(item);
+    }
+
+    // Arama Butonunu Numaraya Göre Güncelleme
+    function updateCallButton(phone) {
+      const callBtn = document.getElementById('btnCallResident');
+      const cleanPhone = String(phone || '').replace(/[^0-9+]/g, '');
+      
+      if (cleanPhone.length >= 7) {
+        callBtn.href = 'tel:' + cleanPhone;
+        callBtn.classList.remove('disabled');
+      } else {
+        callBtn.href = '#';
+        callBtn.classList.add('disabled');
+      }
+    }
+
+    // Düzenleme Kartını Açma
     function openEdit(item) {
       document.getElementById('editRow').value = item.rowIndex;
       document.getElementById('editBlok').value = item.blok;
@@ -418,6 +504,8 @@
       document.getElementById('editAdSoyad').value = item.adSoyad;
       document.getElementById('editTelefon').value = item.telefon;
       document.getElementById('editPlaka').value = item.plaka;
+
+      updateCallButton(item.telefon);
 
       const modal = document.getElementById('editModal');
       modal.style.display = 'block';
@@ -428,6 +516,7 @@
       document.getElementById('editModal').style.display = 'none';
     }
 
+    // Kaydetme ve Tabloya Gönderme
     async function saveData() {
       const btn = document.getElementById('btnSave');
       btn.disabled = true;
@@ -445,20 +534,20 @@
       try {
         await fetch(APPS_SCRIPT_URL, {
           method: 'POST',
-          mode: 'no-cors', // Apps Script cross-origin redirect çözümü
+          mode: 'no-cors',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
 
-        // Lokal veriyi anında güncelle
+        // Lokal diziyi güncelle
         const idx = db.findIndex(i => i.rowIndex == payload.rowIndex);
         if (idx !== -1) db[idx] = payload;
         
         handleSearch();
         closeEdit();
-        alert("Bilgiler güncellendi!");
+        showToast("Bilgiler güncellendi", "success");
       } catch (err) {
-        alert("Kayıt hatası: " + err.message);
+        showToast("Kayıt hatası oluştu", "error");
       } finally {
         btn.disabled = false;
         btn.innerText = "Kaydet";
