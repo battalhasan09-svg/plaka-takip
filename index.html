@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Nova Garden Sitesi Plaka Bilgi Sistemi</title>
+  <title>Site Sakin & Canlı Plaka Okuyucu</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
@@ -13,6 +13,7 @@
     :root {
       --primary: #0f172a;
       --accent: #2563eb;
+      --accent-hover: #1d4ed8;
       --success: #16a34a;
       --success-hover: #15803d;
       --warning: #f59e0b;
@@ -118,6 +119,16 @@
     }
     .btn-cam-toggle { background: var(--accent); color: #fff; }
     .btn-pause { background: #475569; color: #fff; }
+    .btn-new-entry { 
+      background: var(--primary); 
+      color: #fff; 
+      padding: 0 14px; 
+      border-radius: 6px; 
+      white-space: nowrap; 
+      font-size: 0.85rem;
+      flex: none;
+    }
+    .btn-new-entry:hover { background: #1e293b; }
 
     /* Arama Butonu */
     .btn-call {
@@ -145,10 +156,14 @@
       border: 1px solid var(--border);
       margin-bottom: 14px;
     }
+    .search-row {
+      display: flex;
+      gap: 8px;
+    }
     .search-input {
-      width: 100%;
+      flex: 1;
       padding: 12px;
-      font-size: 1rem;
+      font-size: 0.95rem;
       border: 1px solid var(--border);
       border-radius: 6px;
       font-family: 'JetBrains Mono', monospace;
@@ -228,7 +243,7 @@
   </div>
 
   <header>
-    <h1>Nova Garden Sitesi Plaka Bilgi Sistemi</h1>
+    <h1>Site Sakin & Canlı Plaka Okuyucu</h1>
     <div id="connectionStatus">Bağlanıyor...</div>
   </header>
 
@@ -251,34 +266,37 @@
       <button class="btn btn-pause" id="btnPause" onclick="togglePause()" style="display:none;">⏸ Duraklat</button>
     </div>
 
-    <!-- Manuel Arama -->
+    <!-- Arama ve Yeni Kayıt Satırı -->
     <div class="search-card">
-      <input type="text" id="searchInput" class="search-input" placeholder="PLAKA / SAKİN / DAİRE ARA..." oninput="handleSearch()">
+      <div class="search-row">
+        <input type="text" id="searchInput" class="search-input" placeholder="PLAKA / SAKİN / DAİRE ARA..." oninput="handleSearch()">
+        <button class="btn btn-new-entry" onclick="openNewEntry()">+ Yeni Giriş</button>
+      </div>
       <div class="results" id="resultsList"></div>
     </div>
 
-    <!-- Bilgi Düzenleme Paneli -->
+    <!-- Bilgi Düzenleme / Ekleme Paneli -->
     <div class="edit-modal" id="editModal">
-      <h3>Sakin & Araç Kaydı Düzenle</h3>
+      <h3 id="modalTitle">Sakin & Araç Kaydı Düzenle</h3>
       <input type="hidden" id="editRow">
       <div style="display:flex; gap:8px;">
         <div class="field" style="flex:1;">
           <label>Blok</label>
-          <input type="text" id="editBlok">
+          <input type="text" id="editBlok" placeholder="Örn: A">
         </div>
         <div class="field" style="flex:1;">
           <label>Daire</label>
-          <input type="text" id="editDaire">
+          <input type="text" id="editDaire" placeholder="Örn: 12">
         </div>
       </div>
       <div class="field">
         <label>Sakin Adı Soyadı</label>
-        <input type="text" id="editAdSoyad">
+        <input type="text" id="editAdSoyad" placeholder="Ad Soyad">
       </div>
       <div class="field">
         <label>Telefon</label>
         <div style="display:flex; gap:8px;">
-          <input type="text" id="editTelefon" oninput="updateCallButton(this.value)">
+          <input type="text" id="editTelefon" placeholder="05XXXXXXXXX" oninput="updateCallButton(this.value)">
           <a href="#" id="btnCallResident" class="btn-call disabled" target="_blank">
             📞 Ara
           </a>
@@ -286,7 +304,7 @@
       </div>
       <div class="field">
         <label>Araç Plakası</label>
-        <input type="text" id="editPlaka" style="font-family:'JetBrains Mono',monospace; font-weight:700;">
+        <input type="text" id="editPlaka" placeholder="34ABC123" style="font-family:'JetBrains Mono',monospace; font-weight:700;">
       </div>
       <div class="actions">
         <button class="btn btn-save" id="btnSave" onclick="saveData()">Kaydet</button>
@@ -312,7 +330,6 @@
     // Türkiye Plaka Regex Deseni
     const PLATE_REGEX = /^(0[1-9]|[1-7][0-9]|8[01])([A-Z]{1,3})(\d{2,4})$/;
 
-    // Modern Bildirim Gösterici (Standart alert() yerine)
     function showToast(message, type = 'success') {
       const toast = document.getElementById('toastNotification');
       const text = document.getElementById('toastText');
@@ -326,7 +343,6 @@
       }, 3000);
     }
 
-    // Sayfa açılışında Tesseract Worker hazırla ve tablo verilerini çek
     window.onload = async function() {
       fetchData();
       try {
@@ -340,7 +356,6 @@
       }
     };
 
-    // Google Tablosundan Veri Çekme
     async function fetchData() {
       const status = document.getElementById('connectionStatus');
       try {
@@ -354,7 +369,6 @@
       }
     }
 
-    // Canlı Kamera Başlatma
     async function startScanner() {
       const video = document.getElementById('webcam');
       const btnStart = document.getElementById('btnStart');
@@ -382,7 +396,6 @@
       document.getElementById('btnPause').innerText = isPaused ? "▶ Devam Et" : "⏸ Duraklat";
     }
 
-    // Canlı Görüntüyü Kırpıp OCR ile Analiz Etme
     async function processFrame() {
       if (isProcessing || isPaused || !videoStream || !tesseractWorker) return;
 
@@ -426,6 +439,9 @@
           const matched = db.find(i => i.plaka === raw);
           if (matched) {
             openEdit(matched);
+          } else {
+            // Sistemde olmayan bir plaka tespit edildiyse doğrudan yeni giriş formunu o plakayla aç
+            openNewEntry(raw);
           }
         }
       } catch (err) {
@@ -435,7 +451,6 @@
       }
     }
 
-    // Arama ve Liste
     function handleSearch() {
       const q = document.getElementById('searchInput').value.trim().toUpperCase();
       const list = document.getElementById('resultsList');
@@ -482,7 +497,6 @@
       if (item) openEdit(item);
     }
 
-    // Arama Butonunu Numaraya Göre Güncelleme
     function updateCallButton(phone) {
       const callBtn = document.getElementById('btnCallResident');
       const cleanPhone = String(phone || '').replace(/[^0-9+]/g, '');
@@ -496,8 +510,9 @@
       }
     }
 
-    // Düzenleme Kartını Açma
+    // Mevcut Kayıt Düzenleme
     function openEdit(item) {
+      document.getElementById('modalTitle').innerText = "Sakin & Araç Kaydı Düzenle";
       document.getElementById('editRow').value = item.rowIndex;
       document.getElementById('editBlok').value = item.blok;
       document.getElementById('editDaire').value = item.daire;
@@ -512,18 +527,37 @@
       modal.scrollIntoView({ behavior: 'smooth' });
     }
 
+    // Yeni Kayıt Girişini Açma
+    function openNewEntry(presetPlate = '') {
+      document.getElementById('modalTitle').innerText = "Yeni Sakin / Araç Kaydı";
+      document.getElementById('editRow').value = ''; // Boş bırakılarak yeni kayıt olduğunu belirtir
+      document.getElementById('editBlok').value = '';
+      document.getElementById('editDaire').value = '';
+      document.getElementById('editAdSoyad').value = '';
+      document.getElementById('editTelefon').value = '';
+      document.getElementById('editPlaka').value = presetPlate || document.getElementById('searchInput').value.trim().toUpperCase();
+
+      updateCallButton('');
+
+      const modal = document.getElementById('editModal');
+      modal.style.display = 'block';
+      modal.scrollIntoView({ behavior: 'smooth' });
+    }
+
     function closeEdit() {
       document.getElementById('editModal').style.display = 'none';
     }
 
-    // Kaydetme ve Tabloya Gönderme
     async function saveData() {
       const btn = document.getElementById('btnSave');
+      const rowIndex = document.getElementById('editRow').value;
+      const isNew = !rowIndex;
+
       btn.disabled = true;
       btn.innerText = "Kaydediliyor...";
 
       const payload = {
-        rowIndex: document.getElementById('editRow').value,
+        rowIndex: rowIndex,
         blok: document.getElementById('editBlok').value,
         daire: document.getElementById('editDaire').value,
         adSoyad: document.getElementById('editAdSoyad').value,
@@ -539,13 +573,19 @@
           body: JSON.stringify(payload)
         });
 
-        // Lokal diziyi güncelle
-        const idx = db.findIndex(i => i.rowIndex == payload.rowIndex);
-        if (idx !== -1) db[idx] = payload;
+        if (isNew) {
+          // Yeni kayıt durumunda güncel listeyi yeniden çek
+          showToast("Yeni kayıt eklendi", "success");
+          fetchData();
+        } else {
+          // Güncelleme durumunda yerel veriyi yenile
+          const idx = db.findIndex(i => i.rowIndex == payload.rowIndex);
+          if (idx !== -1) db[idx] = payload;
+          showToast("Bilgiler güncellendi", "success");
+        }
         
         handleSearch();
         closeEdit();
-        showToast("Bilgiler güncellendi", "success");
       } catch (err) {
         showToast("Kayıt hatası oluştu", "error");
       } finally {
