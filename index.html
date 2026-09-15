@@ -16,7 +16,6 @@
       --accent-hover: #1d4ed8;
       --success: #16a34a;
       --success-hover: #15803d;
-      --warning: #f59e0b;
       --danger: #dc2626;
       --bg: #f8fafc;
       --card: #ffffff;
@@ -28,6 +27,7 @@
     * { box-sizing: border-box; font-family: 'Inter', sans-serif; margin: 0; padding: 0; }
     body { background-color: var(--bg); color: var(--text); padding-bottom: 50px; }
 
+    /* Üst Başlık */
     header {
       background: var(--primary);
       color: #fff;
@@ -37,9 +37,47 @@
       align-items: center;
     }
     header h1 { font-size: 1.05rem; font-weight: 700; }
+    .header-right { display: flex; align-items: center; gap: 8px; }
     #connectionStatus { font-size: 0.75rem; padding: 4px 8px; border-radius: 99px; background: #334155; color: #cbd5e1; }
+    .btn-logout { background: transparent; border: none; color: #cbd5e1; cursor: pointer; font-size: 1rem; padding: 4px; }
 
     .main { max-width: 500px; margin: 0 auto; padding: 12px; }
+
+    /* PIN Giriş Modalı */
+    #pinOverlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(4px);
+      z-index: 999999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .pin-card {
+      background: #fff;
+      width: 100%;
+      max-width: 340px;
+      padding: 28px 24px;
+      border-radius: 16px;
+      text-align: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    }
+    .pin-card h2 { font-size: 1.2rem; margin-bottom: 8px; color: var(--primary); }
+    .pin-card p { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 18px; }
+    .pin-input {
+      width: 100%;
+      padding: 14px;
+      font-size: 1.3rem;
+      text-align: center;
+      letter-spacing: 0.3em;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 14px;
+      font-family: monospace;
+    }
+    .pin-input:focus { border-color: var(--accent); outline: none; }
 
     /* Canlı Kamera Alanı */
     .viewport-card {
@@ -54,7 +92,6 @@
     }
     video { width: 100%; height: 100%; object-fit: cover; }
     
-    /* Plaka Hedef Çerçevesi (Vizör) */
     .plate-target {
       position: absolute;
       top: 50%;
@@ -97,11 +134,7 @@
       pointer-events: none;
     }
 
-    .scanner-controls {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 14px;
-    }
+    .scanner-controls { display: flex; gap: 8px; margin-bottom: 14px; }
     .btn {
       flex: 1;
       padding: 12px;
@@ -114,7 +147,6 @@
       align-items: center;
       justify-content: center;
       gap: 6px;
-      text-decoration: none;
       transition: background 0.15s ease;
     }
     .btn-cam-toggle { background: var(--accent); color: #fff; }
@@ -148,7 +180,7 @@
     .btn-call:hover { background-color: var(--success-hover); }
     .btn-call.disabled { background-color: #cbd5e1; pointer-events: none; color: #94a3b8; }
 
-    /* Arama ve Liste */
+    /* Arama Kartı */
     .search-card {
       background: var(--card);
       border-radius: 10px;
@@ -156,10 +188,7 @@
       border: 1px solid var(--border);
       margin-bottom: 14px;
     }
-    .search-row {
-      display: flex;
-      gap: 8px;
-    }
+    .search-row { display: flex; gap: 8px; }
     .search-input {
       flex: 1;
       padding: 12px;
@@ -193,7 +222,7 @@
     .result-name { font-weight: 600; font-size: 0.9rem; }
     .result-loc { font-size: 0.75rem; color: var(--text-muted); }
 
-    /* Düzenleme Ekranı */
+    /* Düzenleme Kartı */
     .edit-modal {
       display: none;
       background: var(--card);
@@ -211,7 +240,7 @@
     .btn-save:hover { background: var(--success-hover); }
     .btn-close { background: #e2e8f0; color: #334155; }
 
-    /* Özel Bildirim Kutusu (Toast) */
+    /* Bildirim Toast */
     #toastNotification {
       position: fixed;
       top: -60px;
@@ -224,11 +253,8 @@
       font-size: 0.9rem;
       font-weight: 600;
       box-shadow: 0 4px 14px rgba(0,0,0,0.25);
-      z-index: 99999;
+      z-index: 9999999;
       transition: top 0.3s ease-in-out;
-      display: flex;
-      align-items: center;
-      gap: 8px;
     }
     #toastNotification.show { top: 20px; }
     #toastNotification.toast-success { background-color: var(--success); }
@@ -237,14 +263,27 @@
 </head>
 <body>
 
-  <!-- Özel Bildirim Alanı -->
+  <!-- PIN KODU DOĞRULAMA EKRANI -->
+  <div id="pinOverlay" style="display:none;">
+    <div class="pin-card">
+      <h2>Yetkili Girişi</h2>
+      <p>Lütfen devam etmek için site yönetim PIN kodunu girin.</p>
+      <input type="password" id="pinInput" class="pin-input" placeholder="••••" maxlength="8" inputmode="numeric">
+      <button class="btn btn-cam-toggle" onclick="submitPin()">Giriş Yap</button>
+    </div>
+  </div>
+
+  <!-- Bildirim Alanı -->
   <div id="toastNotification">
     <span id="toastText">Bilgiler güncellendi</span>
   </div>
 
   <header>
     <h1>Site Sakin & Canlı Plaka Okuyucu</h1>
-    <div id="connectionStatus">Bağlanıyor...</div>
+    <div class="header-right">
+      <div id="connectionStatus">Bağlanıyor...</div>
+      <button class="btn-logout" title="Çıkış Yap / PIN Sıfırla" onclick="logoutPin()">🔒</button>
+    </div>
   </header>
 
   <div class="main">
@@ -266,7 +305,7 @@
       <button class="btn btn-pause" id="btnPause" onclick="togglePause()" style="display:none;">⏸ Duraklat</button>
     </div>
 
-    <!-- Arama ve Yeni Kayıt Satırı -->
+    <!-- Arama ve Yeni Kayıt -->
     <div class="search-card">
       <div class="search-row">
         <input type="text" id="searchInput" class="search-input" placeholder="PLAKA / SAKİN / DAİRE ARA..." oninput="handleSearch()">
@@ -275,7 +314,7 @@
       <div class="results" id="resultsList"></div>
     </div>
 
-    <!-- Bilgi Düzenleme / Ekleme Paneli -->
+    <!-- Bilgi Düzenleme / Ekleme Kartı -->
     <div class="edit-modal" id="editModal">
       <h3 id="modalTitle">Sakin & Araç Kaydı Düzenle</h3>
       <input type="hidden" id="editRow">
@@ -320,6 +359,7 @@
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzhepimbIndy0vO4TelDeeYRiV4ODeNWGzFQ8tmTBefigNXWi3v_U_Jfb9K4Bt2KwaP/exec";
     // -------------------------------------------------------------
 
+    let currentPin = localStorage.getItem('site_guard_pin') || '';
     let db = [];
     let videoStream = null;
     let isProcessing = false;
@@ -327,7 +367,6 @@
     let scanInterval = null;
     let tesseractWorker = null;
 
-    // Türkiye Plaka Regex Deseni
     const PLATE_REGEX = /^(0[1-9]|[1-7][0-9]|8[01])([A-Z]{1,3})(\d{2,4})$/;
 
     function showToast(message, type = 'success') {
@@ -343,8 +382,36 @@
       }, 3000);
     }
 
-    window.onload = async function() {
+    // PIN Yönetimi
+    function checkAuth() {
+      if (!currentPin) {
+        document.getElementById('pinOverlay').style.display = 'flex';
+        document.getElementById('pinInput').focus();
+      } else {
+        document.getElementById('pinOverlay').style.display = 'none';
+        fetchData();
+      }
+    }
+
+    function submitPin() {
+      const pin = document.getElementById('pinInput').value.trim();
+      if (!pin) return;
+      currentPin = pin;
+      localStorage.setItem('site_guard_pin', pin);
+      document.getElementById('pinOverlay').style.display = 'none';
       fetchData();
+    }
+
+    function logoutPin() {
+      if (confirm("PIN sıfırlansın ve çıkış yapılsın mı?")) {
+        localStorage.removeItem('site_guard_pin');
+        currentPin = '';
+        location.reload();
+      }
+    }
+
+    window.onload = async function() {
+      checkAuth();
       try {
         tesseractWorker = await Tesseract.createWorker('eng');
         await tesseractWorker.setParameters({
@@ -352,19 +419,31 @@
           tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE
         });
       } catch (e) {
-        console.error("Worker başlatılamadı:", e);
+        console.error("Worker hatası:", e);
       }
     };
 
+    // Google Tablosundan PIN ile Veri Çekme
     async function fetchData() {
       const status = document.getElementById('connectionStatus');
+      status.innerText = "Yükleniyor...";
       try {
-        const res = await fetch(APPS_SCRIPT_URL);
-        db = await res.json();
+        const res = await fetch(`${APPS_SCRIPT_URL}?pin=${encodeURIComponent(currentPin)}`);
+        const result = await res.json();
+        
+        if (result.error) {
+          showToast("Hatalı PIN! Erişim reddedildi.", "error");
+          status.innerText = "Yetkisiz";
+          status.style.background = "#dc2626";
+          logoutPin();
+          return;
+        }
+
+        db = result;
         status.innerText = db.length + " Araç Kayıtlı";
         status.style.background = "#16a34a";
       } catch (err) {
-        status.innerText = "Tabloya Erişilemedi";
+        status.innerText = "Bağlantı Hatası";
         status.style.background = "#dc2626";
       }
     }
@@ -440,7 +519,6 @@
           if (matched) {
             openEdit(matched);
           } else {
-            // Sistemde olmayan bir plaka tespit edildiyse doğrudan yeni giriş formunu o plakayla aç
             openNewEntry(raw);
           }
         }
@@ -510,7 +588,6 @@
       }
     }
 
-    // Mevcut Kayıt Düzenleme
     function openEdit(item) {
       document.getElementById('modalTitle').innerText = "Sakin & Araç Kaydı Düzenle";
       document.getElementById('editRow').value = item.rowIndex;
@@ -527,10 +604,9 @@
       modal.scrollIntoView({ behavior: 'smooth' });
     }
 
-    // Yeni Kayıt Girişini Açma
     function openNewEntry(presetPlate = '') {
       document.getElementById('modalTitle').innerText = "Yeni Sakin / Araç Kaydı";
-      document.getElementById('editRow').value = ''; // Boş bırakılarak yeni kayıt olduğunu belirtir
+      document.getElementById('editRow').value = '';
       document.getElementById('editBlok').value = '';
       document.getElementById('editDaire').value = '';
       document.getElementById('editAdSoyad').value = '';
@@ -557,6 +633,7 @@
       btn.innerText = "Kaydediliyor...";
 
       const payload = {
+        pin: currentPin, // Güvenlik PIN'i gönderiliyor
         rowIndex: rowIndex,
         blok: document.getElementById('editBlok').value,
         daire: document.getElementById('editDaire').value,
@@ -574,11 +651,9 @@
         });
 
         if (isNew) {
-          // Yeni kayıt durumunda güncel listeyi yeniden çek
           showToast("Yeni kayıt eklendi", "success");
           fetchData();
         } else {
-          // Güncelleme durumunda yerel veriyi yenile
           const idx = db.findIndex(i => i.rowIndex == payload.rowIndex);
           if (idx !== -1) db[idx] = payload;
           showToast("Bilgiler güncellendi", "success");
