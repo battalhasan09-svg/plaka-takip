@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>NOVA GARDEN SİTESİ PLAKA BİLGİ SİSTEMİ</title>
+  <title>Site Sakin & Canlı Plaka Okuyucu</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
@@ -133,7 +133,6 @@
       pointer-events: none;
     }
 
-    /* Zoom ve Kamera Butonları */
     .scanner-controls { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
     .btn-row { display: flex; gap: 8px; }
     .btn {
@@ -152,7 +151,7 @@
     }
     .btn-cam-toggle { background: var(--accent); color: #fff; }
     .btn-pause { background: #475569; color: #fff; }
-    .btn-zoom { background: #e2e8f0; color: #0f172a; padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; }
+    .btn-zoom { background: #e2e8f0; color: #0f172a; padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; border: none; cursor: pointer; }
     .btn-zoom.active { background: var(--accent); color: #fff; }
     
     .zoom-bar {
@@ -175,10 +174,11 @@
       white-space: nowrap; 
       font-size: 0.85rem;
       flex: none;
+      border: none;
+      cursor: pointer;
     }
     .btn-new-entry:hover { background: #1e293b; }
 
-    /* Arama Butonu */
     .btn-call {
       background-color: var(--success);
       color: #ffffff;
@@ -295,9 +295,9 @@
   </div>
 
   <header>
-    <h1>NOVA GARDEN SİTESİ PLAKA BİLGİ SİSTEMİ</h1>
+    <h1>Site Sakin & Canlı Plaka Okuyucu</h1>
     <div class="header-right">
-      <div id="connectionStatus">Bağlanıyor...</div>
+      <div id="connectionStatus">Hazırlanıyor...</div>
       <button class="btn-logout" title="Çıkış Yap / PIN Sıfırla" onclick="logoutPin()">🔒</button>
     </div>
   </header>
@@ -313,7 +313,6 @@
         <span id="detectedRaw">Metin bekleniyor...</span>
       </div>
       <canvas id="cropCanvas" style="display:none;"></canvas>
-      <canvas id="processedCanvas" style="display:none;"></canvas>
     </div>
 
     <!-- Kamera ve Zoom Kontrolleri -->
@@ -325,9 +324,9 @@
       <div class="zoom-bar" id="zoomControls" style="display:none;">
         <span>Mesafe / Yakınlaştırma:</span>
         <div style="display:flex; gap:6px;">
-          <button class="btn-zoom active" onclick="setZoomLevel(1)">1x</button>
-          <button class="btn-zoom" onclick="setZoomLevel(1.8)">1.8x</button>
-          <button class="btn-zoom" onclick="setZoomLevel(2.5)">2.5x</button>
+          <button type="button" class="btn-zoom active" onclick="setZoomLevel(1, this)">1x</button>
+          <button type="button" class="btn-zoom" onclick="setZoomLevel(1.8, this)">1.8x</button>
+          <button type="button" class="btn-zoom" onclick="setZoomLevel(2.5, this)">2.5x</button>
         </div>
       </div>
     </div>
@@ -336,7 +335,7 @@
     <div class="search-card">
       <div class="search-row">
         <input type="text" id="searchInput" class="search-input" placeholder="PLAKA / SAKİN / DAİRE ARA..." oninput="handleSearch()">
-        <button class="btn btn-new-entry" onclick="openNewEntry()">+ Yeni Giriş</button>
+        <button type="button" class="btn btn-new-entry" onclick="openNewEntry()">+ Yeni Giriş</button>
       </div>
       <div class="results" id="resultsList"></div>
     </div>
@@ -373,8 +372,8 @@
         <input type="text" id="editPlaka" placeholder="34ABC123" style="font-family:'JetBrains Mono',monospace; font-weight:700;">
       </div>
       <div class="actions">
-        <button class="btn btn-save" id="btnSave" onclick="saveData()">Kaydet</button>
-        <button class="btn btn-close" onclick="closeEdit()">Kapat</button>
+        <button type="button" class="btn btn-save" id="btnSave" onclick="saveData()">Kaydet</button>
+        <button type="button" class="btn btn-close" onclick="closeEdit()">Kapat</button>
       </div>
     </div>
 
@@ -397,7 +396,6 @@
     let scanInterval = null;
     let tesseractWorker = null;
 
-    // Türkiye Plaka Regex Deseni
     const PLATE_REGEX = /^(0[1-9]|[1-7][0-9]|8[01])([A-Z]{1,3})(\d{2,4})$/;
 
     function showToast(message, type = 'success') {
@@ -413,10 +411,12 @@
       }, 3000);
     }
 
+    // PIN Kontrolü
     function checkAuth() {
       if (!currentPin) {
         document.getElementById('pinOverlay').style.display = 'flex';
-        document.getElementById('pinInput').focus();
+        const pInput = document.getElementById('pinInput');
+        if (pInput) setTimeout(() => pInput.focus(), 200);
       } else {
         document.getElementById('pinOverlay').style.display = 'none';
         fetchData();
@@ -440,18 +440,30 @@
       }
     }
 
-    window.onload = async function() {
+    // Sayfa Yüklendiğinde Asenkron Başlatma
+    window.addEventListener('DOMContentLoaded', () => {
       checkAuth();
+      // Arka planda Tesseract motorunu yükle (Arayüzü kilitlemez)
+      initTesseract();
+    });
+
+    async function initTesseract() {
       try {
+        if (typeof Tesseract === 'undefined') {
+          console.warn("Tesseract kütüphanesi henüz yüklenmedi.");
+          return;
+        }
         tesseractWorker = await Tesseract.createWorker('eng');
         await tesseractWorker.setParameters({
           tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ',
           tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE
         });
+        document.getElementById('detectedRaw').innerText = "OCR Motoru Hazır";
       } catch (e) {
         console.error("Worker başlatma hatası:", e);
+        document.getElementById('detectedRaw').innerText = "OCR Hazırlanamadı";
       }
-    };
+    }
 
     async function fetchData() {
       const status = document.getElementById('connectionStatus');
@@ -477,7 +489,7 @@
       }
     }
 
-    // Yüksek Çözünürlüklü Kamera Başlatma
+    // Kamera Başlatma
     async function startScanner() {
       const video = document.getElementById('webcam');
       const btnStart = document.getElementById('btnStart');
@@ -485,7 +497,6 @@
       const zoomControls = document.getElementById('zoomControls');
 
       try {
-        // Mümkün olan en yüksek çözünürlüğü talep et (Net harfler için 1080p ideal)
         videoStream = await navigator.mediaDevices.getUserMedia({
           video: { 
             facingMode: { ideal: "environment" },
@@ -503,20 +514,23 @@
         btnPause.style.display = 'flex';
         zoomControls.style.display = 'flex';
 
-        // İşlemciyi boğmamak için tarama sıklığı 400ms (Saniyede 2.5 kez)
+        if (!tesseractWorker) {
+          initTesseract();
+        }
+
         scanInterval = setInterval(processFrame, 400);
       } catch (err) {
         showToast("Kamera açılamadı: " + err.message, "error");
       }
     }
 
-    // Zoom Seviyesi Değiştirme
-    async function setZoomLevel(level) {
+    // Zoom Kontrolü (Element referansı doğrudan alınıyor)
+    async function setZoomLevel(level, elem) {
       currentZoom = level;
       document.querySelectorAll('.btn-zoom').forEach(b => b.classList.remove('active'));
-      event.target.classList.add('active');
+      if (elem) elem.classList.add('active');
 
-      if (videoTrack && 'getCapabilities' in videoTrack) {
+      if (videoTrack && typeof videoTrack.getCapabilities === 'function') {
         const capabilities = videoTrack.getCapabilities();
         if (capabilities.zoom) {
           try {
@@ -535,14 +549,15 @@
       document.getElementById('btnPause').innerText = isPaused ? "▶ Devam Et" : "⏸ Duraklat";
     }
 
-    // GELİŞMİŞ GÖRÜNTÜ İŞLEME VE ADAPTİF BİNARİZASYON
+    // Görüntü İşleme: Griye Çevirme ve Kontrastlama
     function preprocessImage(srcCanvas) {
       const ctx = srcCanvas.getContext('2d');
       const imgData = ctx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
       const d = imgData.data;
 
-      // 1. Adım: Griye Çevir & Ortalama Parlaklık Hesapla
       let totalBrightness = 0;
+      const totalPixels = d.length / 4;
+
       for (let i = 0; i < d.length; i += 4) {
         const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
         d[i] = gray;
@@ -551,10 +566,8 @@
         totalBrightness += gray;
       }
       
-      // 2. Adım: Adaptif Eşik Değeri (Thresholding)
-      const avgThreshold = (totalBrightness / (d.length / 4)) * 0.9;
+      const avgThreshold = (totalBrightness / totalPixels) * 0.9;
 
-      // 3. Adım: Siyah/Beyaz Netleştirme (Binarization)
       for (let i = 0; i < d.length; i += 4) {
         const val = d[i] > avgThreshold ? 255 : 0;
         d[i] = val;
@@ -566,41 +579,32 @@
       return srcCanvas;
     }
 
-    // TÜRKİYE PLAKA AKILLI KARAKTER DÜZELTİCİ (HEURISTICS)
+    // Türkiye Plaka Zekası (Hatalı Karakter Düzeltici)
     function sanitizeTurkishPlate(str) {
       let raw = str.replace(/[^A-Z0-9]/g, '').trim();
 
-      // Başta TR ibaresi varsa sil
       if (raw.startsWith("TR") && raw.length > 7) {
         raw = raw.substring(2);
       }
 
       if (raw.length < 6 || raw.length > 9) return null;
 
-      // İl Kodu Düzeltmesi (İlk 2 karakter kesinlikle rakamdır)
+      // İlk iki karakteri rakama çek
       let city = raw.substring(0, 2)
         .replace(/O/g, '0').replace(/D/g, '0').replace(/Q/g, '0')
         .replace(/I/g, '1').replace(/L/g, '1')
         .replace(/Z/g, '2').replace(/S/g, '5').replace(/B/g, '8');
 
-      // Geriye kalan kısım
       let rest = raw.substring(2);
-
-      // Kalan kısmın sonundaki rakamları ve ortadaki harfleri ayır
-      // Türkiye plaka formatları: 2 rakam + 1-3 harf + 2-4 rakam
-      let middleLetters = "";
-      let lastDigits = "";
-
-      // Harf olan bloğu yakala
       let match = rest.match(/^([A-Z0-9]{1,3})([A-Z0-9]{2,4})$/);
       if (!match) return null;
 
-      // Ortadaki kısım harftir (Rakamları harfe çevir)
-      middleLetters = match[1]
+      // Ortadaki kısmı harfe çek
+      let middleLetters = match[1]
         .replace(/0/g, 'O').replace(/1/g, 'I').replace(/8/g, 'B').replace(/5/g, 'S').replace(/2/g, 'Z');
 
-      // Sondaki kısım rakamdır (Harfleri rakama çevir)
-      lastDigits = match[2]
+      // Sondaki kısmı rakama çek
+      let lastDigits = match[2]
         .replace(/O/g, '0').replace(/D/g, '0').replace(/Q/g, '0')
         .replace(/I/g, '1').replace(/L/g, '1')
         .replace(/Z/g, '2').replace(/S/g, '5').replace(/B/g, '8');
@@ -613,7 +617,7 @@
       return null;
     }
 
-    // Kare Yakalama ve Analiz Döngüsü
+    // Kare Yakalama ve Analiz
     async function processFrame() {
       if (isProcessing || isPaused || !videoStream || !tesseractWorker) return;
 
@@ -624,8 +628,6 @@
       const canvas = document.getElementById('cropCanvas');
       const ctx = canvas.getContext('2d');
 
-      // Video çözünürlüğüne göre vizör alanını keskin biçimde kırp
-      // Yazılımsal zoom katsayısını hesapla
       const effectiveZoom = currentZoom;
       const cropW = (video.videoWidth * 0.8) / effectiveZoom;
       const cropH = (video.videoHeight * 0.25) / effectiveZoom;
@@ -636,8 +638,6 @@
       canvas.height = cropH;
 
       ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-
-      // Görüntüyü kontrast/binarizasyon filtresinden geçir
       preprocessImage(canvas);
       
       try {
@@ -648,7 +648,6 @@
           document.getElementById('detectedRaw').innerText = raw;
         }
 
-        // Akıllı plaka doğrulaması
         const validPlate = sanitizeTurkishPlate(raw);
 
         if (validPlate) {
@@ -667,7 +666,7 @@
           }
         }
       } catch (err) {
-        console.warn("OCR hatası:", err);
+        console.warn("OCR tarama uyarısı:", err);
       } finally {
         isProcessing = false;
       }
